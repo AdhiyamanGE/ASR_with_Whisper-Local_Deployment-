@@ -1,18 +1,16 @@
 import os
+from datetime import datetime
 import streamlit as st
 import whisper
+from streamlit_mic_recorder import mic_recorder
 
-# Force ffmpeg path if needed
 FFMPEG_BIN = r"C:\Users\adhiy\Downloads\ffmpeg-master-latest-win64-gpl\bin"
 os.environ["PATH"] = FFMPEG_BIN + os.pathsep + os.environ.get("PATH", "")
 
-st.title("Streamlit Voice Recorder + Whisper")
+st.title("Streamlit Mic + Whisper")
 
-# Ensure recordings folder exists (relative to this script)
 RECORD_DIR = os.path.join(os.path.dirname(__file__), "recordings")
 os.makedirs(RECORD_DIR, exist_ok=True)
-
-audio_file = st.audio_input("Record your message")
 
 
 @st.cache_resource
@@ -20,25 +18,33 @@ def load_model():
     return whisper.load_model("base")
 
 
-if audio_file is not None:
-    st.audio(audio_file)
+audio = mic_recorder(
+    start_prompt="Start recording",
+    stop_prompt="Stop recording",
+    just_once=False,
+    use_container_width=True,
+    key="mic",
+)
 
-    # Choose a filename; you can use timestamp or counter
-    filename = "input.wav"
-    save_path = os.path.join(RECORD_DIR, filename)
+if audio is not None:
+    st.audio(audio["bytes"], format="audio/wav")
 
-    # Save UploadedFile bytes to your project folder
-    with open(save_path, "wb") as f:
-        f.write(audio_file.read())
+if st.button("Submit") and audio is not None:
+    with st.spinner("Transcribing..."):
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"input_{ts}.wav"
+        save_path = os.path.join(RECORD_DIR, filename)
 
-    # Transcribe from this fixed path
-    model = load_model()
-    result = model.transcribe(
-        save_path,
-        task="translate",  # translate any language -> English
-        language=None,  # None = auto-detect language
-    )
-    text = result["text"]  # this will be English
+        with open(save_path, "wb") as f:
+            f.write(audio["bytes"])
+
+        model = load_model()
+        result = model.transcribe(
+            save_path,
+            task="translate",
+            language=None,
+        )
+        text = result["text"]
 
     st.markdown("### Transcription")
-    st.write(text)
+    st.text_area("Edit transcription", text, height=150)
